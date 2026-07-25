@@ -1,3 +1,10 @@
+# cureforest 0.1.2
+
+- Added `compare_forest_fits()` so that a fitted cure forest and a fitted
+  ordinary random survival forest can be compared directly on held-out data.
+- Reworked the installed demonstration to show the two model fits and their
+  predictions explicitly before calculating held-out C-index and Brier scores.
+
 # cureforest 0.1.1
 
 - Added the built-in `cure_latency_demo` data set for a self-contained,

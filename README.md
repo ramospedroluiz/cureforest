@@ -30,17 +30,40 @@ install.packages("cureforest")
 
 The package includes a prespecified train/test data set in which one marker
 changes cure probability and another changes failure timing among susceptible
-subjects. The complete held-out comparison is one command:
+subjects. The two forests are fitted explicitly, just as in a standard
+random-forest example:
 
 ```r
 install.packages("randomForestSRC")
 library(cureforest)
+library(survival)
 
-result <- cureforest_demo(ntree = 200, n.cores = 6)
-result$performance
+data(cure_latency_demo)
+train <- subset(cure_latency_demo, cohort == "train")
+test <- subset(cure_latency_demo, cohort == "test")
+form <- Surv(time, event) ~
+  cure_marker + latency_marker + age + stage + biomarker + noise
+
+fit.cure <- cureforest(
+  form, train, ntree = 200, mtry = 6, nodesize = 80, maxdepth = 1,
+  tail.start = 7, tail.end = 9.5, n.cores = 6, seed = 20260725
+)
+
+fit.rsf <- randomForestSRC::rfsrc(
+  form, train, ntree = 200, mtry = 6, nodesize = 80, nodedepth = 1,
+  splitrule = "logrank", nthread = 6, seed = 20260725
+)
+
+pred.cure <- predict(fit.cure, test, type = "cure")
+head(pred.cure)
+
+comparison <- compare_forest_fits(fit.cure, fit.rsf, test, n.cores = 6)
+comparison$performance
 ```
 
-For the explicit formula and all settings, see:
+The returned table reports the held-out C-index for the proposed cure forest
+and for the ordinary log-rank random survival forest, together with Brier
+scores and IBS. The complete script is installed with the package:
 
 ```r
 system.file("examples", "cureforest-vs-rsf.R", package = "cureforest")
