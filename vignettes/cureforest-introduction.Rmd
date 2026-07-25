@@ -1,0 +1,155 @@
+---
+title: "Cure-Fraction Survival Trees and Forests with cureforest"
+author: "Pedro Luiz Ramos and Lucas Osses"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Cure-Fraction Survival Trees and Forests with cureforest}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+## Scope
+
+`cureforest` is designed for right-censored studies in which the scientific
+target is a long-term event-free or cure fraction. The target is a
+population-level probability inferred from the survival tail. It is not an
+observed subject-level cure label, and it requires adequate follow-up.
+
+The package supplies:
+
+1. `survcure()`, an honest cure-fraction survival tree;
+2. `randomforestcure()`, a randomized ensemble of honest trees;
+3. matched log-rank splitting through `splitrule = "logrank"`;
+4. population, susceptible, and dynamic-cure predictions.
+
+## Simulated long-term survival data
+
+The following small example has one variable that changes the cure fraction
+and one variable that changes event timing among susceptible subjects.
+
+```{r data}
+library(survival)
+library(cureforest)
+
+set.seed(2401)
+n <- 600
+x_cure <- runif(n)
+x_latency <- factor(rbinom(n, 1, 0.5), labels = c("slow", "fast"))
+noise <- rnorm(n)
+
+pi0 <- plogis(-0.8 + 3.0 * (x_cure - 0.5))
+long_term <- rbinom(n, 1, pi0)
+rate <- ifelse(x_latency == "fast", 0.35, 0.14)
+susceptible_time <- pmin(rexp(n, rate), 9)
+event_time <- ifelse(long_term == 1, Inf, susceptible_time)
+censor_time <- runif(n, 0, 12)
+
+dat <- data.frame(
+  time = pmin(event_time, censor_time),
+  status = as.integer(event_time <= censor_time),
+  x_cure = x_cure,
+  x_latency = x_latency,
+  noise = noise
+)
+```
+
+## Fit an honest tree
+
+The 7--9 year window is specified before fitting. Both daughter nodes must
+retain adequate risk-set support in this interval.
+
+```{r tree}
+tree <- curetree(
+  Surv(time, status) ~ x_cure + x_latency + noise,
+  data = dat,
+  tail.start = 7,
+  tail.end = 9,
+  nodesize = 30,
+  min.tail.at.risk = 8,
+  min.tail.end.at.risk = 3,
+  maxdepth = 2,
+  nsplit = 8,
+  seed = 11
+)
+tree
+summary(tree)
+```
+
+The estimated cure probability and population survival are available through
+the standard `predict()` generic.
+
+```{r tree-predict}
+predict(tree, dat[1:6, ], type = "cure")
+predict(tree, dat[1:3, ], type = "survival", times = c(3, 6, 9))
+```
+
+## Fit a cure-fraction forest
+
+This vignette uses 20 trees for speed. Analyses ordinarily use a larger
+ensemble and should examine stability across random seeds.
+
+```{r forest}
+forest <- cureforest(
+  Surv(time, status) ~ x_cure + x_latency + noise,
+  data = dat,
+  ntree = 20,
+  mtry = 2,
+  nodesize = 25,
+  maxdepth = 2,
+  nsplit = 8,
+  tail.start = 7,
+  tail.end = 9,
+  min.tail.at.risk = 7,
+  min.tail.end.at.risk = 3,
+  n.cores = 1,
+  seed = 22
+)
+forest
+cure_importance(forest)
+```
+
+```{r forest-predict}
+pred <- predict(forest, dat[1:4, ], type = "all", times = c(3, 6, 9))
+pred$cure
+pred$survival
+pred$susceptible
+pred$dynamic
+```
+
+## Matched log-rank comparison
+
+Use the same tree controls with `splitrule = "logrank"` to isolate the effect
+of the splitting target. A generic predictive advantage should not be assumed:
+the comparison asks whether cure-oriented splitting creates different,
+tail-supported strata.
+
+```{r matched-comparison}
+logrank_tree <- curetree(
+  Surv(time, status) ~ x_cure + x_latency + noise,
+  data = dat,
+  splitrule = "logrank",
+  tail.start = 7,
+  tail.end = 9,
+  nodesize = 30,
+  min.tail.at.risk = 8,
+  min.tail.end.at.risk = 3,
+  maxdepth = 2,
+  nsplit = 8,
+  seed = 11
+)
+
+summary(tree)$splits
+summary(logrank_tree)$splits
+```
+
+## Reporting recommendations
+
+Report the prespecified tail window, numbers at risk at its beginning and end,
+terminal fallback frequency, and sensitivity to alternative scientifically
+reasonable windows. Prediction metrics complement these diagnostics but do not
+replace them.
