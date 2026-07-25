@@ -36,4 +36,54 @@ if (requireNamespace("randomForestSRC", quietly = TRUE)) {
     all(is.finite(benchmark$performance$Brier_8y)),
     nrow(benchmark$contrast) == 3L
   )
+
+  training <- small_demo[small_demo$cohort == "train", , drop = FALSE]
+  testing <- small_demo[small_demo$cohort == "test", , drop = FALSE]
+  direct_formula <- stats::as.formula(
+    paste(
+      "Surv(time, event) ~ cure_marker + latency_marker +",
+      "age + stage + biomarker + noise"
+    ),
+    env = asNamespace("survival")
+  )
+  fit_cure <- cureforest(
+    direct_formula,
+    data = training,
+    ntree = 4L,
+    mtry = 6L,
+    nodesize = 20L,
+    maxdepth = 1L,
+    nsplit = 2L,
+    tail.start = 7,
+    tail.end = 9.5,
+    n.cores = 1L,
+    seed = 72L
+  )
+  fit_rsf <- randomForestSRC::rfsrc(
+    direct_formula,
+    data = training,
+    ntree = 4L,
+    mtry = 6L,
+    nodesize = 20L,
+    nodedepth = 1L,
+    nsplit = 2L,
+    splitrule = "logrank",
+    nthread = 1L,
+    seed = 72L
+  )
+  direct_comparison <- compare_forest_fits(
+    fit_cure,
+    fit_rsf,
+    newdata = testing,
+    n.cores = 1L
+  )
+  stopifnot(
+    inherits(direct_comparison, "cureforest_benchmark"),
+    identical(
+      direct_comparison$performance$Method,
+      c("cureforest", "randomForestSRC")
+    ),
+    all(is.finite(direct_comparison$performance$C_index)),
+    all(is.finite(direct_comparison$performance$Brier_8y))
+  )
 }
