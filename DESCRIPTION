@@ -1,0 +1,32 @@
+Package: cureforest
+Type: Package
+Title: Cure-Fraction Trees and Random Survival Forests
+Version: 0.1.0
+Authors@R: c(
+    person("Pedro Luiz", "Ramos", role = c("aut", "cre"),
+           email = "pedro.ramos@uc.cl",
+           comment = c(ORCID = "0000-0002-5387-2457")),
+    person("Lucas", "Osses", role = "aut")
+  )
+Author: Pedro Luiz Ramos [aut, cre],
+    Lucas Osses [aut]
+Maintainer: Pedro Luiz Ramos <pedro.ramos@uc.cl>
+Description: Fits survival trees and random survival forests using
+    cure-fraction-oriented splitting for right-censored long-term survival
+    data. Node-level long-term survival probabilities are estimated by
+    tail-averaged Kaplan-Meier or inverse-probability-of-censoring weighted
+    estimators. Honest sample splitting and explicit tail-maturity constraints
+    prevent unsupported terminal-node estimates. The forest implementation
+    provides out-of-bag prediction, parallel tree construction, split-based
+    variable importance, experimental infinitesimal-jackknife diagnostics,
+    and coherent estimates of population and susceptible survival.
+License: GPL-3
+URL: https://github.com/ramospedroluiz/cureforest
+BugReports: https://github.com/ramospedroluiz/cureforest/issues
+Encoding: UTF-8
+Depends: R (>= 4.1.0)
+Imports: parallel, stats, survival, utils, graphics
+Suggests: knitr, rmarkdown
+VignetteBuilder: knitr
+NeedsCompilation: no
+Language: en-US
