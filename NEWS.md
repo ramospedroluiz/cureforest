@@ -1,3 +1,11 @@
+# cureforest 0.1.1
+
+- Added the built-in `cure_latency_demo` data set for a self-contained,
+  train/test illustration of cure-latency separation.
+- Added `compare_cureforest()` to fit `cureforest` and `randomForestSRC` on the
+  same split and report held-out Harrell C-index and marginal-IPCW Brier scores.
+- Added `cureforest_demo()` as a one-command reproducible demonstration.
+
 # cureforest 0.1.0
 
 - Initial CRAN candidate release.

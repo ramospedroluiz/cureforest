@@ -147,6 +147,31 @@ summary(tree)$splits
 summary(logrank_tree)$splits
 ```
 
+## Held-out comparison with a standard random survival forest
+
+`cure_latency_demo` is included with the package, so the complete comparison
+requires no external files or preprocessing. The function uses the
+prespecified training and test cohorts and reports Harrell C-index and
+marginal-IPCW Brier scores.
+
+```{r rsf-comparison, eval=FALSE}
+data(cure_latency_demo)
+
+benchmark <- compare_cureforest(
+  survival::Surv(time, event) ~
+    cure_marker + latency_marker + age + stage + biomarker + noise,
+  data = cure_latency_demo,
+  ntree = 200,
+  n.cores = 6
+)
+benchmark
+```
+
+The benchmark is deliberately shallow: it isolates the effect of asking each
+split to target cure or event-time separation. It is an explanatory example,
+not an empirical claim that one forest must dominate the other in every data
+set.
+
 ## Reporting recommendations
 
 Report the prespecified tail window, numbers at risk at its beginning and end,

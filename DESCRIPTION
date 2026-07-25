@@ -1,7 +1,7 @@
 Package: cureforest
 Type: Package
 Title: Cure-Fraction Trees and Random Survival Forests
-Version: 0.1.0
+Version: 0.1.1
 Authors@R: c(
     person("Pedro Luiz", "Ramos", role = c("aut", "cre"),
            email = "pedro.ramos@uc.cl",
@@ -26,7 +26,7 @@ BugReports: https://github.com/ramospedroluiz/cureforest/issues
 Encoding: UTF-8
 Depends: R (>= 4.1.0)
 Imports: parallel, stats, survival, utils, graphics
-Suggests: knitr, rmarkdown
+Suggests: knitr, rmarkdown, randomForestSRC
 VignetteBuilder: knitr
 NeedsCompilation: no
 Language: en-US

@@ -16,8 +16,8 @@ essential part of the analysis.
 Install the development version from GitHub with:
 
 ```r
-install.packages("devtools")
-devtools::install_github("ramospedroluiz/cureforest")
+install.packages("remotes")
+remotes::install_github("ramospedroluiz/cureforest")
 ```
 
 After a CRAN release, installation will be available through:
@@ -25,6 +25,29 @@ After a CRAN release, installation will be available through:
 ```r
 install.packages("cureforest")
 ```
+
+## Two-minute comparison with randomForestSRC
+
+The package includes a prespecified train/test data set in which one marker
+changes cure probability and another changes failure timing among susceptible
+subjects. The complete held-out comparison is one command:
+
+```r
+install.packages("randomForestSRC")
+library(cureforest)
+
+result <- cureforest_demo(ntree = 200, n.cores = 6)
+result$performance
+```
+
+For the explicit formula and all settings, see:
+
+```r
+system.file("examples", "cureforest-vs-rsf.R", package = "cureforest")
+```
+
+The example is a controlled illustration of the difference between cure and
+log-rank splitting, not an empirical superiority claim.
 
 ## Cure-fraction survival tree
 
