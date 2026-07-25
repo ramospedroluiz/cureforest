@@ -150,27 +150,36 @@ summary(logrank_tree)$splits
 ## Held-out comparison with a standard random survival forest
 
 `cure_latency_demo` is included with the package, so the complete comparison
-requires no external files or preprocessing. The function uses the
-prespecified training and test cohorts and reports Harrell C-index and
-marginal-IPCW Brier scores.
+requires no external files or preprocessing. Here the proposed model and the
+ordinary log-rank random survival forest are fitted explicitly before both
+objects are evaluated on the prespecified test cohort.
 
 ```{r rsf-comparison, eval=FALSE}
 data(cure_latency_demo)
+train <- subset(cure_latency_demo, cohort == "train")
+test <- subset(cure_latency_demo, cohort == "test")
+form <- Surv(time, event) ~
+  cure_marker + latency_marker + age + stage + biomarker + noise
 
-benchmark <- compare_cureforest(
-  survival::Surv(time, event) ~
-    cure_marker + latency_marker + age + stage + biomarker + noise,
-  data = cure_latency_demo,
-  ntree = 200,
-  n.cores = 6
+fit.cure <- cureforest(
+  form, train, ntree = 200, mtry = 6, nodesize = 80, maxdepth = 1,
+  tail.start = 7, tail.end = 9.5, n.cores = 6, seed = 20260725
 )
-benchmark
+fit.rsf <- randomForestSRC::rfsrc(
+  form, train, ntree = 200, mtry = 6, nodesize = 80, nodedepth = 1,
+  splitrule = "logrank", nthread = 6, seed = 20260725
+)
+
+predict(fit.cure, test, type = "cure")
+benchmark <- compare_forest_fits(fit.cure, fit.rsf, test, n.cores = 6)
+benchmark$performance
 ```
 
 The benchmark is deliberately shallow: it isolates the effect of asking each
 split to target cure or event-time separation. It is an explanatory example,
 not an empirical claim that one forest must dominate the other in every data
-set.
+set. The reported table contains the held-out C-index for both methods,
+together with Brier scores and IBS.
 
 ## Reporting recommendations
 
