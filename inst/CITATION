@@ -1,0 +1,13 @@
+citHeader("To cite cureforest in publications, please use:")
+
+bibentry(
+  bibtype = "Manual",
+  title = "cureforest: Cure-Fraction Trees and Random Survival Forests",
+  author = c(
+    person("Pedro Luiz", "Ramos"),
+    person("Lucas", "Osses")
+  ),
+  year = "2026",
+  note = "R package version 0.1.0",
+  url = "https://github.com/ramospedroluiz/cureforest"
+)
