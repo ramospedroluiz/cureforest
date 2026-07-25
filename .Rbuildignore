@@ -4,5 +4,6 @@
 ^\.gitignore$
 ^CONTRIBUTING\.md$
 ^LICENSE\.md$
+^data-raw$
 ^doc$
 ^Meta$
