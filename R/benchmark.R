@@ -362,6 +362,214 @@ compare_cureforest <- function(formula,
   output
 }
 
+#' Compare two already fitted survival forests
+#'
+#' Evaluates an already fitted [cureforest()] object and an ordinary
+#' `randomForestSRC::rfsrc` object on the same test data. This is the simplest
+#' interface for examples in which the two models should be fitted explicitly.
+#'
+#' @param cure_fit An object returned by [cureforest()].
+#' @param rsf_fit An ordinary random survival forest returned by
+#'   `randomForestSRC::rfsrc()`.
+#' @param newdata Held-out test data containing the outcome and predictors.
+#' @param time,status Names of the observed-time and event-indicator columns.
+#' @param horizons Evaluation horizons for Brier scores.
+#' @param tail Two numbers defining the late-survival window used for the RSF
+#'   long-term risk score.
+#' @param n.cores Number of threads used when predicting from the ordinary RSF.
+#' @return An object of class `cureforest_benchmark`. The `performance` data
+#'   frame contains the held-out C-index, Brier scores, and IBS.
+#' @export
+compare_forest_fits <- function(cure_fit,
+                                rsf_fit,
+                                newdata,
+                                time = "time",
+                                status = "event",
+                                horizons = c(3, 5, 8),
+                                tail = c(7, 9.5),
+                                n.cores = 1L) {
+  if (!requireNamespace("randomForestSRC", quietly = TRUE)) {
+    stop(
+      "Package 'randomForestSRC' is required. Install it with ",
+      "install.packages(\"randomForestSRC\").",
+      call. = FALSE
+    )
+  }
+  if (!inherits(cure_fit, "randomforestcure")) {
+    stop("cure_fit must be an object returned by cureforest().",
+         call. = FALSE)
+  }
+  if (!inherits(rsf_fit, "rfsrc")) {
+    stop("rsf_fit must be an object returned by randomForestSRC::rfsrc().",
+         call. = FALSE)
+  }
+  if (!is.data.frame(newdata) || nrow(newdata) < 20L) {
+    stop("newdata must be a data frame with at least 20 observations.",
+         call. = FALSE)
+  }
+  if (!is.character(time) || length(time) != 1L || !time %in% names(newdata)) {
+    stop("time must name the observed-time column in newdata.", call. = FALSE)
+  }
+  if (!is.character(status) || length(status) != 1L ||
+      !status %in% names(newdata)) {
+    stop("status must name the event-indicator column in newdata.",
+         call. = FALSE)
+  }
+  observed_time <- as.numeric(newdata[[time]])
+  observed_status <- as.integer(newdata[[status]])
+  if (any(!is.finite(observed_time)) || any(observed_time <= 0)) {
+    stop("The observed-time column must contain positive finite values.",
+         call. = FALSE)
+  }
+  if (anyNA(observed_status) || any(!observed_status %in% 0:1)) {
+    stop("The event-indicator column must contain only 0 and 1.",
+         call. = FALSE)
+  }
+  if (sum(observed_status) < 5L) {
+    stop("newdata must contain at least five observed events.", call. = FALSE)
+  }
+  if (!is.numeric(horizons) || length(horizons) < 1L ||
+      any(!is.finite(horizons)) || any(horizons <= 0)) {
+    stop("horizons must contain positive finite values.", call. = FALSE)
+  }
+  horizons <- sort(unique(as.numeric(horizons)))
+  if (!is.numeric(tail) || length(tail) != 2L ||
+      any(!is.finite(tail)) || tail[1L] <= 0 || tail[2L] <= tail[1L]) {
+    stop("tail must contain two increasing positive values.", call. = FALSE)
+  }
+  if (max(horizons) > tail[2L]) {
+    stop("Evaluation horizons cannot exceed the end of the tail window.",
+         call. = FALSE)
+  }
+  n.cores <- .cfr_benchmark_integer(n.cores, "n.cores", 1L)
+  tail_grid <- seq(tail[1L], tail[2L], length.out = 6L)
+
+  cure_survival <- predict(
+    cure_fit,
+    newdata = newdata,
+    type = "survival",
+    times = horizons
+  )
+  cure_probability <- as.numeric(
+    predict(cure_fit, newdata = newdata, type = "cure")
+  )
+  rsf_prediction <- stats::predict(
+    rsf_fit,
+    newdata = newdata,
+    outcome = "test",
+    nthread = n.cores
+  )
+  rsf_survival <- .cfr_benchmark_step_survival(
+    rsf_prediction$survival,
+    rsf_prediction$time.interest,
+    horizons
+  )
+  rsf_tail_survival <- .cfr_benchmark_step_survival(
+    rsf_prediction$survival,
+    rsf_prediction$time.interest,
+    tail_grid
+  )
+  rsf_cure_proxy <- rowMeans(rsf_tail_survival)
+
+  censoring_fit <- .cfr_benchmark_censoring_fit(
+    observed_time, observed_status
+  )
+  cure_brier <- vapply(
+    seq_along(horizons),
+    function(j) {
+      .cfr_benchmark_brier(
+        observed_time,
+        observed_status,
+        cure_survival[, j],
+        horizons[j],
+        censoring_fit
+      )
+    },
+    numeric(1L)
+  )
+  rsf_brier <- vapply(
+    seq_along(horizons),
+    function(j) {
+      .cfr_benchmark_brier(
+        observed_time,
+        observed_status,
+        rsf_survival[, j],
+        horizons[j],
+        censoring_fit
+      )
+    },
+    numeric(1L)
+  )
+
+  performance <- data.frame(
+    Method = c("cureforest", "randomForestSRC"),
+    C_index = c(
+      .cfr_benchmark_concordance(
+        observed_time, observed_status, 1 - cure_probability
+      ),
+      .cfr_benchmark_concordance(
+        observed_time, observed_status, 1 - rsf_cure_proxy
+      )
+    ),
+    stringsAsFactors = FALSE
+  )
+  for (j in seq_along(horizons)) {
+    metric_name <- paste0(
+      "Brier_", format(horizons[j], trim = TRUE), "y"
+    )
+    performance[[metric_name]] <- c(cure_brier[j], rsf_brier[j])
+  }
+  performance$IBS <- c(
+    .cfr_benchmark_integral(horizons, cure_brier),
+    .cfr_benchmark_integral(horizons, rsf_brier)
+  )
+
+  primary_brier <- paste0(
+    "Brier_", format(max(horizons), trim = TRUE), "y"
+  )
+  contrast <- data.frame(
+    Metric = c(
+      "C-index difference",
+      paste0("Brier reduction at ", max(horizons), " years (%)"),
+      "IBS reduction (%)"
+    ),
+    Value = c(
+      performance$C_index[1L] - performance$C_index[2L],
+      100 * (
+        performance[[primary_brier]][2L] -
+          performance[[primary_brier]][1L]
+      ) / performance[[primary_brier]][2L],
+      100 * (performance$IBS[2L] - performance$IBS[1L]) /
+        performance$IBS[2L]
+    ),
+    stringsAsFactors = FALSE
+  )
+
+  output <- list(
+    call = match.call(),
+    performance = performance,
+    contrast = contrast,
+    fits = list(cureforest = cure_fit, randomForestSRC = rsf_fit),
+    predictions = list(
+      cureforest_cure = cure_probability,
+      randomForestSRC_tail = rsf_cure_proxy,
+      horizons = horizons
+    ),
+    cohorts = data.frame(
+      Cohort = "Test",
+      N = nrow(newdata),
+      Events = sum(observed_status)
+    ),
+    settings = list(
+      horizons = horizons,
+      tail = tail,
+      n.cores = n.cores
+    )
+  )
+  class(output) <- "cureforest_benchmark"
+  output
+}
+
 #' Run the self-contained cure-latency demonstration
 #'
 #' Loads `cure_latency_demo`, fits the two forests, and prints held-out C-index
