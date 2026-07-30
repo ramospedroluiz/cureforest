@@ -86,7 +86,7 @@ forest <- randomforestcure(
   nodesize = 25,
   maxdepth = 2,
   nsplit = 8,
-  sampsize = 0.8,
+  sampsize = 300,
   tail.start = 7,
   tail.end = 9,
   tail.times = seq(7, 9, length.out = 5),
@@ -102,10 +102,76 @@ forest <- randomforestcure(
 stopifnot(
   inherits(forest, "randomforestcure"),
   length(forest$trees) == 24,
+  isTRUE(forest$one_shot_subsampling),
+  all(vapply(
+    forest$trees,
+    function(tree) identical(tree$subsample_attempts, 1L),
+    logical(1L)
+  )),
   mean(forest$oob.count > 0) > 0.95,
   nrow(cure_importance(forest, aggregate = FALSE)) == forest$p,
   nrow(cure_importance(forest, aggregate = TRUE)) == 3,
   isTRUE(all.equal(forest$tail_grid, seq(7, 9, length.out = 5)))
+)
+
+coherence_helper <- if (exists(".cfr_coherent_tree_survival")) {
+  get(".cfr_coherent_tree_survival")
+} else {
+  getFromNamespace(".cfr_coherent_tree_survival", "cureforest")
+}
+coherent_first <- coherence_helper(matrix(0.20, 1, 1), 0.70)
+coherent_second <- coherence_helper(matrix(0.80, 1, 1), 0.10)
+coherent_forest <- mean(c(coherent_first[1, 1], coherent_second[1, 1]))
+post_aggregate_projection <- max(mean(c(0.20, 0.80)), mean(c(0.70, 0.10)))
+stopifnot(
+  isTRUE(all.equal(coherent_forest, 0.75)),
+  isTRUE(all.equal(post_aggregate_projection, 0.50)),
+  coherent_forest != post_aggregate_projection
+)
+
+tree_task_helper <- if (exists(".cfr_tree_task")) {
+  get(".cfr_tree_task")
+} else {
+  getFromNamespace(".cfr_tree_task", "cureforest")
+}
+fallback_context <- list(
+  x = matrix(seq_len(40), ncol = 1),
+  time = seq(0.25, 10, length.out = 40),
+  status = rep(c(1L, 0L), 20),
+  variable_names = "x",
+  splitrule = "cure",
+  estimator = "km",
+  tail_start = 6,
+  tail_end = 9,
+  tail_grid = c(6, 7.5, 9),
+  curve_grid = seq(0, 10, length.out = 11),
+  nodesize = 4L,
+  min_tail_at_risk = 11L,
+  min_tail_end_at_risk = 1L,
+  min_events_before_tail = 1L,
+  maxdepth = 1L,
+  mtry = 1L,
+  nsplit = 3L,
+  epsilon = 1e-4,
+  lambda = 0.05,
+  min_gain = 0,
+  ipcw_model = NA_character_,
+  ipcw_clipped_fraction = 0
+)
+fallback_tree <- tree_task_helper(
+  list(
+    seed = 102L, sampsize = 20L, replace = FALSE, honesty = TRUE,
+    honesty_fraction = 0.5, oob = TRUE, keep_inbag = TRUE,
+    max_attempts = 1L, one_shot = TRUE
+  ),
+  fallback_context
+)
+stopifnot(
+  isTRUE(fallback_tree$one_shot_fallback),
+  identical(fallback_tree$subsample_attempts, 1L),
+  length(fallback_tree$inbag) == 20L,
+  grepl("one_shot_fallback", fallback_tree$nodes$estimate_reason[1L],
+        fixed = TRUE)
 )
 
 all_prediction <- predict(
@@ -158,7 +224,7 @@ forest_parallel <- randomforestcure(
   nodesize = 25,
   maxdepth = 2,
   nsplit = 8,
-  sampsize = 0.8,
+  sampsize = 300,
   tail.start = 7,
   tail.end = 9,
   tail.times = seq(7, 9, length.out = 5),
@@ -167,6 +233,7 @@ forest_parallel <- randomforestcure(
   seed = 77,
   oob = TRUE,
   importance = TRUE,
+  inference = TRUE,
   n.cores = 2
 )
 serial_prediction <- predict(forest, data[1:30, ], type = "cure")

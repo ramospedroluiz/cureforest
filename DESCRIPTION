@@ -1,7 +1,7 @@
 Package: cureforest
 Type: Package
 Title: Cure-Fraction Trees and Random Survival Forests
-Version: 0.1.2
+Version: 0.1.3
 Authors@R: c(
     person("Pedro Luiz", "Ramos", role = c("aut", "cre"),
            email = "pedro.ramos@uc.cl",

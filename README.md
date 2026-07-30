@@ -3,9 +3,9 @@
 [![R-CMD-check](https://github.com/ramospedroluiz/cureforest/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/ramospedroluiz/cureforest/actions/workflows/R-CMD-check.yaml)
 
 `cureforest` fits survival trees and random survival forests whose split rule
-targets differences in long-term survival probabilities. It is intended for
-right-censored studies with sufficiently mature follow-up to support a
-population-level cure or long-term event-free fraction.
+targets differences in a finite-tail survival probability. With sufficiently
+mature follow-up and negligible residual susceptible survival in the chosen
+window, this target can be interpreted as a population-level cure fraction.
 
 The package does not classify an observed individual as biologically cured.
 Its estimand is a tail-supported probability, and the maturity controls are an
@@ -146,9 +146,10 @@ that returns `P(C > t | X)` for every row of `newdata`.
 - `"terminal"`: terminal-node identifiers;
 - `"all"`: all available functionals.
 
-Population survival is constrained to be no smaller than the estimated cure
-probability. The returned population and susceptible curves therefore satisfy
-the mixture identity numerically.
+Within every tree, population survival is constrained to be no smaller than
+that tree's estimated tail probability; the coherent tree curves are then
+averaged. This order matters in finite forests. The returned population and
+susceptible curves satisfy the mixture identity numerically.
 
 ## Practical guidance
 
@@ -156,10 +157,14 @@ the mixture identity numerically.
   not by maximizing test-set performance.
 - Inspect `summary()` for terminal-node fallback and maturity diagnostics.
 - Use `splitrule = "logrank"` with the same controls for a matched comparison.
-- Treat IJ standard errors as experimental diagnostics. Variance calibration
-  around the forest expectation does not remove localization or residual-tail
-  bias, so cure-target intervals can undercover; `se.fit = FALSE` remains the
-  default.
+- Treat IJ standard errors as experimental diagnostics. Requesting them
+  requires a fit made with `inference = TRUE`, which enforces one-shot
+  fixed-size subsampling without replacement, a sublinear integer subsample
+  schedule, prespecified tail times, positive score stabilization, and
+  external user-supplied IPCW weights when IPCW is used. Calibration around
+  the forest expectation does not remove localization or residual-tail bias,
+  so target-centered intervals require additional bias rates;
+  `se.fit = FALSE` remains the default.
 - When IJ output is requested, inspect `ij.unstable` and
   `finite.B.correction.fraction`; a warning means that the finite-tree
   subtraction exhausted the raw IJ variance and more trees are needed before

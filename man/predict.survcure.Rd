@@ -39,27 +39,31 @@ pointwise confidence interval is returned.
 }
 \description{Predicts cure probabilities and related long-term survival quantities.}
 \details{
-The susceptible curve is derived coherently from the returned population
-survival and cure probability. The dynamic quantity is the probability of cure
-conditional on survival to each requested time. These transformations are
-truncated to the unit interval for numerical stability.
+For a forest, each tree survival curve is first constrained to be no smaller
+than that tree's tail-supported probability, and these coherent tree curves
+are then averaged. The susceptible curve is derived from the returned forest
+survival and average tail probability. The dynamic quantity is the probability
+of belonging to the long-term-survivor component conditional on survival to
+each requested time. These transformations are truncated to the unit interval
+for numerical stability.
 
 New factor levels not present during model fitting are not supported. Missing
 numeric or encoded predictor values follow the default branch stored in each
 tree.
 
-IJ inference requires an honest forest sampled without replacement and fitted
-with \code{inference = TRUE} or \code{keep.inbag = TRUE}. The IJ component
+IJ inference requires a forest fitted explicitly with
+\code{inference = TRUE}. That mode enforces honest, one-shot, fixed-size
+subsampling without replacement, a sublinear integer subsample schedule,
+prespecified tail times, and the remaining restrictions documented in
+\code{\link{randomforestcure}}. The IJ component
 estimates repeated-sample variation; the Monte Carlo component measures
 variation from using finitely many randomized trees. Setting
 \code{return.influence = TRUE} returns the inclusion covariances needed to
 estimate variances of paired prediction contrasts. The IJ output is
-calibrated for fixed-size subsampling without replacement. The simulation
-study accompanying the package found that the corrected IJ standard error
-tracked repeated-sample variation around the forest expectation. Coverage of
-the cure target remained sensitive to localization, regularization, and tail
-bias. IJ intervals should therefore be interpreted with the maturity and bias
-conditions described in the accompanying manuscript.
+calibrated for fixed-size subsampling without replacement and is centered on
+the forest expectation. Centering an interval on the finite-tail target, and
+then on exact cure, requires additional forest-bias and residual-tail-bias
+rates described in the accompanying manuscript.
 
 The returned list includes \code{finite.B.correction.fraction}, the ratio of
 the finite-\eqn{B} correction to the raw IJ variance, and

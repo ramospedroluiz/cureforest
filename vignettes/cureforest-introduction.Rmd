@@ -16,9 +16,11 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 ## Scope
 
 `cureforest` is designed for right-censored studies in which the scientific
-target is a long-term event-free or cure fraction. The target is a
-population-level probability inferred from the survival tail. It is not an
-observed subject-level cure label, and it requires adequate follow-up.
+target is long-term event-free survival. For a fixed window, the directly
+identified target is an average of the population survival tail. It equals a
+cure fraction only when residual susceptible survival over that window is
+negligible. It is not an observed subject-level cure label, and it requires
+adequate follow-up.
 
 The package supplies:
 

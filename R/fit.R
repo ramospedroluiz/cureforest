@@ -312,6 +312,8 @@ survcure <- function(formula,
 #'
 #' @param ntree Number of trees.
 #' @param sampsize Sampling fraction in `(0,1]` or an integer sample size.
+#' @param inference.exponent Maximum exponent in the theorem-backed inference
+#'   schedule `sampsize <= floor(n^inference.exponent)`.
 #' @param n.cores Number of parallel R workers.
 #' @return An object of class `randomforestcure`.
 #' @export
@@ -351,6 +353,7 @@ randomforestcure <- function(formula,
                              na.action = stats::na.omit,
                              keep.data = FALSE,
                              inference = FALSE,
+                             inference.exponent = 0.90,
                              keep.inbag = inference) {
   call <- match.call()
   .cfr_assert_scalar(ntree, "ntree", 1, 100000, integer = TRUE)
@@ -361,9 +364,31 @@ randomforestcure <- function(formula,
   }
   .cfr_assert_scalar(honesty.fraction, "honesty.fraction", 0, 1,
                      inclusive = FALSE)
+  .cfr_assert_scalar(inference.exponent, "inference.exponent", 0, 1,
+                     inclusive = FALSE)
   if (isTRUE(inference) && (!isTRUE(honesty) || isTRUE(replace))) {
     stop("inference = TRUE requires honesty = TRUE and replace = FALSE.",
          call. = FALSE)
+  }
+  if (isTRUE(inference) && !isTRUE(keep.inbag)) {
+    stop("inference = TRUE requires keep.inbag = TRUE.", call. = FALSE)
+  }
+  if (isTRUE(inference) && (length(sampsize) != 1L ||
+      !is.finite(sampsize) || sampsize <= 1 ||
+      sampsize != as.integer(sampsize))) {
+    stop(
+      "inference = TRUE requires sampsize as an integer count, not a fixed fraction.",
+      call. = FALSE
+    )
+  }
+  if (isTRUE(inference) && is.null(tail.times)) {
+    stop(
+      "inference = TRUE requires prespecified tail.times; full-data tail selection is not theorem-backed.",
+      call. = FALSE
+    )
+  }
+  if (isTRUE(inference) && lambda <= 0) {
+    stop("inference = TRUE requires lambda > 0.", call. = FALSE)
   }
   if (isTRUE(replace) && isTRUE(honesty)) {
     warning("Sampling with replacement can place repeated subjects in both honest subsamples.",
@@ -389,6 +414,20 @@ randomforestcure <- function(formula,
     stop("inference = TRUE requires sampsize to be smaller than n.",
          call. = FALSE)
   }
+  if (isTRUE(inference) && sample_n > floor(n^inference.exponent)) {
+    stop(
+      "inference = TRUE requires sampsize <= floor(n^inference.exponent), ",
+      "with inference.exponent strictly below one.",
+      call. = FALSE
+    )
+  }
+  if (isTRUE(inference) && fit$context$estimator == "ipcw" &&
+      fit$context$ipcw_model != "user") {
+    stop(
+      "inference = TRUE permits IPCW only with external user-supplied censoring weights.",
+      call. = FALSE
+    )
+  }
   if (honesty && floor(sample_n * min(honesty.fraction, 1 - honesty.fraction)) <
       2L * fit$context$nodesize) {
     warning("The honest subsamples are small relative to nodesize; many trees may remain shallow.",
@@ -405,7 +444,8 @@ randomforestcure <- function(formula,
     honesty_fraction = honesty.fraction,
     oob = isTRUE(oob),
     keep_inbag = isTRUE(keep.inbag),
-    max_attempts = 20L
+    max_attempts = if (isTRUE(inference)) 1L else 20L,
+    one_shot = isTRUE(inference)
   ))
 
   start <- proc.time()[[3L]]
@@ -463,6 +503,15 @@ randomforestcure <- function(formula,
       honesty = isTRUE(honesty),
       honesty_fraction = honesty.fraction,
       inference = isTRUE(inference),
+      inference_exponent = if (isTRUE(inference)) {
+        inference.exponent
+      } else NA_real_,
+      one_shot_subsampling = isTRUE(inference),
+      one_shot_fallbacks = sum(vapply(
+        trees,
+        function(tree) isTRUE(tree$one_shot_fallback),
+        logical(1L)
+      )),
       n.cores = n.cores,
       oob = isTRUE(oob),
       predicted = oob_prediction,

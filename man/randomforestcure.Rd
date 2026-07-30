@@ -14,14 +14,16 @@ randomforestcure(formula, data, ntree = 500L, mtry = NULL,
   g.fun = NULL, ipcw.folds = 5L, g.lower = 0.02, oob = TRUE,
   importance = TRUE, n.cores = 1L, seed = 1L,
   na.action = stats::na.omit, keep.data = FALSE, inference = FALSE,
-  keep.inbag = inference)
+  inference.exponent = 0.9, keep.inbag = inference)
 }
 \arguments{
   \item{formula, data}{A right-censored survival formula and data frame.}
   \item{ntree}{Number of trees.}
   \item{mtry}{Encoded predictors sampled at each node.}
   \item{nodesize, maxdepth, nsplit}{Tree size and split-search controls.}
-  \item{sampsize}{A sampling fraction or integer sample size.}
+  \item{sampsize}{A sampling fraction or integer sample size. For
+  \code{inference = TRUE}, this must be an integer satisfying the sublinear
+  schedule described below.}
   \item{replace}{Whether trees use sampling with replacement.}
   \item{honesty, honesty.fraction}{Honest sample-splitting controls.}
   \item{splitrule, estimator}{Split criterion and node estimator.}
@@ -40,6 +42,9 @@ randomforestcure(formula, data, ntree = 500L, mtry = NULL,
   \item{keep.data}{Whether to retain the analysis data.}
   \item{inference}{Enable the honest subsampling architecture and retain
   inclusion indicators required for infinitesimal-jackknife inference.}
+  \item{inference.exponent}{A number strictly between zero and one. In
+  inference mode, the integer subsample size cannot exceed
+  \code{floor(n^inference.exponent)}.}
   \item{keep.inbag}{Whether to retain tree-specific subject-inclusion
   indicators. Defaults to the value of \code{inference}.}
 }
@@ -59,9 +64,18 @@ survival probability. They are available only for observations with positive
 \code{oob.count}. The \code{n.cores} argument uses PSOCK workers. During CRAN
 checks the package respects the two-core check-farm limit.
 
-Setting \code{inference = TRUE} requires \code{honesty = TRUE} and
-\code{replace = FALSE}. It retains in-bag indicators used by
-\code{predict(..., se.fit = TRUE, se.type = "ij")}.
+Setting \code{inference = TRUE} activates the restricted kernel covered by
+the accompanying asymptotic argument. It requires honest sampling without
+replacement, one fixed-size integer subsample per tree, a sublinear subsample
+schedule, prespecified \code{tail.times}, positive \code{lambda}, and retained
+subject-inclusion indicators. A failed tree is replaced by a bounded root
+estimate from the same subsample; the implementation does not reject that
+subsample and draw another. If IPCW is requested, only external
+user-supplied censoring weights are permitted in this mode.
+
+The tail average is a finite-tail survival target. Calling it an exact cure
+fraction additionally requires residual susceptible survival over the chosen
+window to be negligible.
 }
 \examples{
 library(survival)

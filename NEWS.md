@@ -1,3 +1,21 @@
+# cureforest 0.1.3
+
+- Corrected forest survival aggregation: each tree curve is first constrained
+  by that tree's tail-supported probability, and the coherent tree curves are
+  then averaged.
+- Restricted `inference = TRUE` to the kernel covered by the accompanying
+  theory: one fixed-size subsample without replacement per tree, honest
+  splitting, a sublinear integer subsample schedule, prespecified tail times,
+  positive score stabilization, and external user-supplied IPCW weights when
+  IPCW is used.
+- Added a same-subsample root fallback for inference trees, eliminating
+  reject-and-resample behavior while preserving a bounded prediction.
+- IJ standard errors now require a fit created explicitly with
+  `inference = TRUE`.
+- Clarified throughout that a fixed tail window targets a finite-tail
+  survival functional; interpreting it as exact cure additionally requires
+  negligible residual susceptible survival.
+
 # cureforest 0.1.2
 
 - Added `compare_forest_fits()` so that a fitted cure forest and a fitted

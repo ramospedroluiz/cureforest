@@ -27,6 +27,18 @@
   survival
 }
 
+.cfr_coherent_tree_survival <- function(survival, cure) {
+  if (!is.matrix(survival)) survival <- as.matrix(survival)
+  if (length(cure) != nrow(survival)) {
+    stop("cure must have one value for each survival-curve row.",
+         call. = FALSE)
+  }
+  cure_matrix <- matrix(
+    cure, nrow = nrow(survival), ncol = ncol(survival)
+  )
+  .cfr_clip(pmax(survival, cure_matrix))
+}
+
 #' Predict from a cure-fraction survival tree
 #' @export
 predict.survcure <- function(object,
@@ -104,6 +116,10 @@ predict.randomforestcure <- function(object,
   }
   use_ij <- isTRUE(se.fit) && se.type %in% c("ij", "both")
   if (use_ij) {
+    if (!isTRUE(object$inference)) {
+      stop("IJ inference requires a fit created with inference = TRUE.",
+           call. = FALSE)
+    }
     if (!isTRUE(object$honesty) || isTRUE(object$replace)) {
       stop("IJ inference requires an honest forest sampled without replacement.",
            call. = FALSE)
@@ -112,7 +128,7 @@ predict.randomforestcure <- function(object,
       object$trees, function(tree) !is.null(tree$inbag), logical(1L)
     )
     if (!all(has_inbag)) {
-      stop("IJ inference requires a fit with inference = TRUE or keep.inbag = TRUE.",
+      stop("IJ inference requires retained subject-inclusion indicators.",
            call. = FALSE)
     }
   }
@@ -140,7 +156,10 @@ predict.randomforestcure <- function(object,
     raw <- .cfr_predict_tree_raw(object$trees[[b]], x, survival = need_survival)
     cure_sum <- cure_sum + raw$cure
     if (se.fit) tree_cure[, b] <- raw$cure
-    if (need_survival) survival_sum <- survival_sum + raw$survival
+    if (need_survival) {
+      survival_sum <- survival_sum +
+        .cfr_coherent_tree_survival(raw$survival, raw$cure)
+    }
     if (!is.null(terminal)) terminal[, b] <- raw$node
   }
   cure <- cure_sum / object$ntree

@@ -46,6 +46,48 @@ expect_error(
   randomforestcure(form, dat, ntree = 2, inference = TRUE, honesty = FALSE),
   "requires honesty"
 )
+expect_error(
+  randomforestcure(
+    form, dat, ntree = 2, inference = TRUE, sampsize = 0.5,
+    tail.times = c(5, 6, 7)
+  ),
+  "integer count"
+)
+expect_error(
+  randomforestcure(
+    form, dat, ntree = 2, inference = TRUE, sampsize = 80
+  ),
+  "prespecified tail.times"
+)
+expect_error(
+  randomforestcure(
+    form, dat, ntree = 2, inference = TRUE, sampsize = 80,
+    tail.times = c(5, 6, 7), lambda = 0
+  ),
+  "lambda > 0"
+)
+expect_error(
+  randomforestcure(
+    form, dat, ntree = 2, inference = TRUE, sampsize = 150,
+    tail.times = c(5, 6, 7), inference.exponent = 0.8
+  ),
+  "sampsize <= floor"
+)
+expect_error(
+  randomforestcure(
+    form, dat, ntree = 2, inference = TRUE, sampsize = 80,
+    tail.times = c(5, 6, 7), keep.inbag = FALSE
+  ),
+  "keep.inbag"
+)
+expect_error(
+  randomforestcure(
+    form, dat, ntree = 2, inference = TRUE, sampsize = 80,
+    tail.times = c(5, 6, 7), estimator = "ipcw",
+    ipcw.model = "marginal"
+  ),
+  "external user-supplied"
+)
 expect_error(survcure(form, dat, maxdepth = 99), "maxdepth")
 expect_error(
   survcure(form, dat, tail.start = 5, tail.end = 7, tail.times = c(4, 6)),
@@ -94,6 +136,29 @@ stopifnot(
   identical(dim(terminal), c(6L, 8L)),
   inherits(summary(forest), "summary.randomforestcure"),
   inherits(summary(fit), "summary.survcure")
+)
+
+inference_forest <- cureforest(
+  form, dat,
+  ntree = 4,
+  sampsize = 80,
+  mtry = 2,
+  nodesize = 12,
+  maxdepth = 1,
+  tail.times = c(5, 6, 7),
+  min.tail.at.risk = 4,
+  min.tail.end.at.risk = 2,
+  inference = TRUE,
+  n.cores = 1,
+  seed = 18
+)
+stopifnot(
+  isTRUE(inference_forest$one_shot_subsampling),
+  all(vapply(
+    inference_forest$trees,
+    function(tree) identical(tree$subsample_attempts, 1L),
+    logical(1L)
+  ))
 )
 
 cat("cureforest validation tests passed\n")

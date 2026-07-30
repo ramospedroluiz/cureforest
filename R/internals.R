@@ -265,6 +265,98 @@
   .cfr_eval_step(components, context$curve_grid, "survival", 1)
 }
 
+.cfr_unrestricted_root_estimate <- function(index, context) {
+  if (!length(index)) {
+    return(list(
+      pi = 0.5, var_pi = 0, n_tail = 0L, n_tail_end = 0L,
+      n_events = 0L, tail_slope = 0
+    ))
+  }
+  time <- context$time[index]
+  status <- context$status[index]
+  if (context$estimator == "ipcw") {
+    tail_survival <- colMeans(
+      context$ipcw_tail[index, , drop = FALSE]
+    )
+    contribution <- context$ipcw_tail_mean[index]
+    pi_hat <- mean(contribution)
+    var_pi <- if (length(contribution) > 1L) {
+      stats::var(contribution) / length(contribution)
+    } else 0
+  } else {
+    order_time <- order(time)
+    components <- .cfr_components_sorted(
+      time[order_time], status[order_time]
+    )
+    tail_survival <- .cfr_eval_step(
+      components, context$tail_grid, "survival", 1
+    )
+    greenwood <- .cfr_eval_step(
+      components, context$tail_grid, "greenwood", 0
+    )
+    weights <- rep.int(1 / length(tail_survival), length(tail_survival))
+    weighted_survival <- weights * tail_survival
+    greenwood_increment <- c(greenwood[1L], diff(greenwood))
+    reverse_sum <- rev(cumsum(rev(weighted_survival)))
+    var_pi <- sum(pmax(greenwood_increment, 0) * reverse_sum^2)
+    pi_hat <- mean(tail_survival)
+  }
+  if (!is.finite(pi_hat)) pi_hat <- 0.5
+  if (!is.finite(var_pi)) var_pi <- 0
+  list(
+    pi = .cfr_clip(pi_hat),
+    var_pi = max(var_pi, 0),
+    n_tail = sum(time >= context$tail_start),
+    n_tail_end = sum(time >= context$tail_end),
+    n_events = sum(status == 1L & time <= context$tail_start),
+    tail_slope = if (length(tail_survival)) {
+      tail_survival[1L] - tail_survival[length(tail_survival)]
+    } else 0
+  )
+}
+
+.cfr_one_shot_fallback_tree <- function(structure, estimation, context,
+                                        reason = "tree construction failed") {
+  estimate <- .cfr_unrestricted_root_estimate(estimation, context)
+  nodes <- data.frame(
+    node = 1L,
+    depth = 0L,
+    split_variable = NA_integer_,
+    split_value = NA_real_,
+    split_score = NA_real_,
+    left = NA_integer_,
+    right = NA_integer_,
+    default_left = TRUE,
+    cure = estimate$pi,
+    variance = estimate$var_pi,
+    estimate_valid = FALSE,
+    estimate_reason = paste0("one_shot_fallback: ", reason),
+    used_parent_fallback = FALSE,
+    n_structure = length(structure),
+    n_estimation = length(estimation),
+    n_tail = estimate$n_tail,
+    n_tail_end = estimate$n_tail_end,
+    tail_slope = estimate$tail_slope,
+    terminal = TRUE
+  )
+  survival <- matrix(
+    .cfr_terminal_survival(estimation, context),
+    nrow = 1L,
+    dimnames = list(
+      NULL,
+      format(context$curve_grid, trim = TRUE, scientific = FALSE)
+    )
+  )
+  list(
+    nodes = nodes,
+    survival = survival,
+    curve_grid = context$curve_grid,
+    variable_names = context$variable_names,
+    root_cure = estimate$pi,
+    one_shot_fallback = TRUE
+  )
+}
+
 .cfr_logrank_sorted <- function(time, status, left) {
   n <- length(time)
   runs <- rle(time)
@@ -470,7 +562,8 @@
     survival = survival,
     curve_grid = context$curve_grid,
     variable_names = context$variable_names,
-    root_cure = root_estimate$pi
+    root_cure = root_estimate$pi,
+    one_shot_fallback = FALSE
   )
 }
 
@@ -479,7 +572,8 @@
   n <- nrow(context$x)
   tree <- NULL
   last_error <- NULL
-  for (attempt in seq_len(task$max_attempts)) {
+  attempts <- if (isTRUE(task$one_shot)) 1L else task$max_attempts
+  for (attempt in seq_len(attempts)) {
     sampled <- sample.int(n, task$sampsize, replace = task$replace)
     sampled_unique <- unique(sampled)
     if (task$honesty) {
@@ -497,10 +591,16 @@
     }
     last_error <- candidate
   }
+  if (is.null(tree) && isTRUE(task$one_shot)) {
+    tree <- .cfr_one_shot_fallback_tree(
+      structure, estimation, context, as.character(last_error)
+    )
+  }
   if (is.null(tree)) {
-    stop("Tree construction failed after ", task$max_attempts,
+    stop("Tree construction failed after ", attempts,
          " resampling attempts: ", as.character(last_error), call. = FALSE)
   }
+  tree$subsample_attempts <- as.integer(attempt)
   oob <- if (task$oob) setdiff(seq_len(n), sampled_unique) else integer(0)
   tree$oob <- oob
   if (task$keep_inbag) tree$inbag <- sampled_unique
